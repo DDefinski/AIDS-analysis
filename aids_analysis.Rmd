@@ -1,0 +1,184 @@
+---
+title: "aids"
+author: "Daniel Definski"
+date: "26 01 2021"
+output: html_document
+---
+
+Laduje biblioteki, ktore beda wykorzystywane.
+
+```{r}
+
+library("ggthemes")
+library("plotly")
+library("lattice")
+library("tidyverse")
+library("readxl")
+
+```
+
+
+Wczytuje plik i sprawdzam czy sa braki w danych.
+
+```{r}
+
+aids <- read.csv(file="aids.csv", header = TRUE, sep = ",", 
+               dec = ".", fill = TRUE, comment.char = "#")
+
+colnames(aids)[1] <- c("id")
+
+any(is.na(aids))
+
+
+```
+Dane nie zawieraj braków, nie trzeba ich przeksztalcac.
+
+
+Ogólne przedstawienie danych dotyczacych wieku.
+
+```{r}
+
+summary(aids$age)
+
+```
+
+Przedstawienie ilosci osob martwych i zywych z podzialem na plec.
+
+```{r}
+
+aids %>% count(status,sex) %>% rename(amount=n)
+
+```
+
+
+Przedstawienie rozdzialu ilosci zdiagnozowanych osob na stany.
+
+```{r}
+
+aids %>% count(state) %>% rename(amount=n)
+
+```
+
+Przedstawienie rozdzialu rodzaju transmisji choroby.
+
+```{r}
+
+aids %>% count(T.categ) %>% rename(amount=n)
+
+```
+
+Przedstawienie sredniej dlugosci zycia i sredniego czasu pod obserwacja.
+
+```{r}
+
+aids %>% filter(status=="D") %>% summarize(life_length=round(mean(age),2),diag_to_death_days=round(mean(death-diag),2))
+
+```
+
+Przedstawienie informacji o osobach niepelnoletnich.
+
+```{r}
+
+aids %>% filter(age<18) %>% arrange(age)
+
+```
+
+Przedstawienie informacji o 10 najstarszych zdiagnozowanych osobach.
+
+```{r}
+
+oldest<-aids %>% arrange(age)
+tail(oldest,10)
+
+```
+
+Wykres przedstawia rozklad zdiagnozowanych osob wzgledem kazdego z regionow. Zawiera takze podzial na osoby zywe i martwe. Najwiecej zdiagnozowanych osob jest w Nowej Poludniowej Walii, jest tam tez najwieksza populacja.
+
+```{r}
+
+colors=c("#99FFFF","#660033")
+ggplot(data = aids) + 
+  geom_bar(mapping = aes(x=state, fill=status),width=0.7, position = position_dodge(0.8),color="black") + 
+  scale_fill_manual(name="Legend", labels=c("D"="Dead", "A"="Alive"), values=colors, ) + 
+  theme(plot.background = element_rect(fill="#FFFFCC"), legend.background = element_rect(fill="#FFFFCC")) +
+  xlab("State") + 
+  ylab("Amount") +
+  ggtitle("Diagnosis amounts in states") + 
+  theme(plot.title=element_text(size=20, hjust=0.5))
+
+```
+
+Ponizsze wykresy przedstawiaja stosunek dlugosci czasu obserwacji wzgledem wieku pacjenta z podzialem na stany. Na kazdym z nich wiekszosc punktow oscyluje w okolicach 40 lat i czas obserwacji w wiekszosci nie przekracza 1000 dni czyli okolo 3 lat.
+
+```{r}
+
+par(mfrow=c(2,2))
+
+NSWframe<-aids %>% filter(state=="NSW") %>% mutate(time=death-diag)
+Otherframe<-aids %>% filter(state=="Other") %>% mutate(time=death-diag)
+QLDframe<-aids %>% filter(state=="QLD") %>% mutate(time=death-diag)
+VICframe<-aids %>% filter(state=="VIC") %>% mutate(time=death-diag)
+
+
+plot(NSWframe$age, NSWframe$time, col="#004D40",cex=0.7,type="p",pch=20,xlab="age",ylab="observation time",xlim=c(0, 82), ylim=c(0, 2500))
+title("NSW")
+
+plot(Otherframe$age, Otherframe$time, col="#00BFA5",cex=0.7,type="p",pch=20,xlab="age",ylab="observation time",xlim=c(0, 82), ylim=c(0, 2500))
+title("Other")
+
+plot(QLDframe$age, QLDframe$time, col="#BF360C",cex=0.7,type="p",pch=20,xlab="age",ylab="observation time",xlim=c(0, 82), ylim=c(0, 2500))
+title("QLD")
+
+plot(VICframe$age, VICframe$time, col="#AA00FF",cex=0.7,type="p",pch=20,xlab="age",ylab="observation time",xlim=c(0, 82), ylim=c(0, 2500))
+title("VIC")
+
+
+```
+
+Ponizsze wykresy przedstawiaja stosunek wieku do dlugosci obserwacji z podzialem na typ transmisji choroby. Osoby zarazone przez matke to tylko dzieci, zarazone przez uzywki to glownie ludzie z przedzialu 20-40 lat, natomiast zarazenia przez krew nie wykazuje zadnej tendencji, tam tez czas obserwacji jest najbardziej zroznicowany.
+
+```{r}
+
+
+xyplot(death-diag~age | T.categ, aids,group=T.categ, breaks=seq(from=0,to=90,by=5),
+          main="Age to observation time by transmission category",
+          xlab="Age", ylab="Observation days", pch=4, cex=0.6 )
+
+```
+
+Poniższy histogram pokazuje rozklad prawdpodobienstwa wieku zarażenia, zielone slupki dotycza meżczyzn, a fioletowe kobiet. W przypadku meżczyzn najwieksze wartosci sa w przedziale 25-40. W przypadku kobiet, ze wzgledu na bardzo mala ilosc próbek dane nie pokazuja rzetelnych wartosci
+
+```{r}
+men<-aids %>% filter(sex=="M")
+women<-aids %>% filter(sex=="F")
+
+
+figure<-plot_ly(type='histogram',x=men$age, nbinsx=45, name="Male", histnorm="probability",opacity=0.8,marker = list(color="lime"))
+
+figure<-figure %>% add_trace(x=women$age, name="Female",marker = list(color="fuchsia"))
+figure<-figure %>% layout(barmode="overlay", 
+                      yaxis = list(title = "Probability"),
+                      xaxis = list(title = "Age"),
+                      title='<b>Age distribution<b>',
+                      legend=list(title=list(text='<b>Sex<b>')))
+
+
+figure
+```
+
+Ponizszy wykres przedstawia ilosc zdiagnozowanych osob wzgledem wieku oraz czas obserwacji wzgledem wieku. Czesc liniowa dotyczy czasu obserwacji i jej os Y jest z prawej strony, natomiast czesc slupkowa przedstawia ilosc osob, jej os znajduje sie z lewej strony. W przypadku malej ilosci probek wykres liniowy przedtsawia wartosci bardzo różnorodne, natomiast w przypadku dużej ilosci próbek, tj. w srodkowej czesci wykresu, mozna doszukac sie pewnej liniowosci wykresu i widac delikatny spadek czasu obserwacji wzgledem wieku.
+
+```{r}
+coeff <- 10
+
+age_to_time<-aids %>% group_by(age) %>% summarize(time=mean(death-diag))
+temp=aids %>% count(age)
+age_to_time<-age_to_time %>% mutate(amount=temp$n)
+ggplot(data=age_to_time,aes(x=age)) +
+  geom_bar(aes(y=amount),stat="identity", size=.1, alpha=.4, fill="#FF66FF", colour="#FF66FF") +
+  geom_line(aes(y=time/coeff),size=0.8) +
+  scale_y_continuous(name="Amount", sec.axis = sec_axis(~.*coeff, name="Observation time")) +
+  ggtitle("Avg. observation time by age") + theme(plot.title=element_text(size=20, hjust=0.5))
+  
+
+```
